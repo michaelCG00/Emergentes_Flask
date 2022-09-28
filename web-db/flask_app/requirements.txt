@@ -1,0 +1,4 @@
+flask
+flask-mysqldb
+flask-Cors==3.0.9
+Flask-RESTful

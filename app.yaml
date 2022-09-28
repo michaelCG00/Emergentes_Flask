@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: web-storage-claim
+spec:
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 3Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  selector: 
+    matchLabels: 
+      app: web-apache
+# kubectl delete pvc web-storage-claim
+# kubectl patch pvc web-storage-claim -p '{\"metadata\":{\"finalizers\":null}}'
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: web-storage
+  labels:
+    app: web-react
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local: 
+    path: "/run/desktop/mnt/host/d/Kubernetes/web-db/frontend"
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - docker-desktop
+# kubectl delete web-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flask-storage-claim
+spec:
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 3Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  selector: 
+    matchLabels: 
+      app: web-flask
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: flask-storage
+  labels:
+    type: local
+    app: web-flask
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  local: 
+    path: "/run/desktop/mnt/host/d/Kubernetes/web-db/flask_app"
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - docker-desktop
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-db-deployment
+spec:
+  selector:
+    matchLabels:
+      app: web-db
+  template:
+    metadata:
+      labels:
+        app: web-db
+    spec:
+      volumes:
+        - name: web-storage
+          persistentVolumeClaim:
+            claimName: web-storage-claim
+        - name: flask-storage
+          persistentVolumeClaim:
+            claimName: flask-storage-claim
+      containers:
+      - name: web-db
+        image: eccv5000676/practical_assignment2_db
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 3306
+      - name: web-react
+        image: eccv5000676/practical_assignment2_react
+        volumeMounts:
+          - mountPath: /app
+            name: web-storage
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      - name: web-flask
+        image: eccv5000676/practical_assignment2_flask
+        volumeMounts:
+          - mountPath: /opt/app
+            name: flask-storage
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-db-service
+spec:
+  type: ClusterIP
+  selector:
+    app: web-db
+  ports:
+  - name: "mysql"
+    port: 3308
+    targetPort: 3306
+  - name: "react"
+    port: 3000
+    targetPort: 3000
+  - name: "flask"
+    port: 5000
+    targetPort: 81
